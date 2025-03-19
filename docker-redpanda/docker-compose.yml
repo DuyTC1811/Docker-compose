@@ -1,16 +1,7 @@
-version: '3.9'
-
-networks:
-  redpanda_network:
-    driver: bridge
-
-volumes:
-  redpanda-data: null
-
 services:
   redpanda-0:
     # NOTE: Please use the latest version here!
-    image: docker.redpanda.com/redpandadata/redpanda:v23.3.10
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.7
     container_name: redpanda-0
     command:
       - redpanda
@@ -37,7 +28,7 @@ services:
   
   console:
     container_name: redpanda-console
-    image: docker.redpanda.com/redpandadata/console:v2.4.5
+    image: docker.redpanda.com/redpandadata/console:v2.8.4
     networks:
       - redpanda_network
     entrypoint: /bin/sh
@@ -58,3 +49,10 @@ services:
       - '1234:8080'
     depends_on:
       - redpanda-0
+
+networks:
+  redpanda_network:
+    driver: bridge
+
+volumes:
+  redpanda-data: null

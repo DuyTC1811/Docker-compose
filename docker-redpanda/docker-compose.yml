@@ -3,6 +3,7 @@ services:
     # NOTE: Please use the latest version here!
     image: docker.redpanda.com/redpandadata/redpanda:v24.3.7
     container_name: redpanda-0
+    restart: always
     command:
       - redpanda
       - start
@@ -21,13 +22,11 @@ services:
     networks:
       - redpanda_network
     ports:
-      - '28081:28081'
-      - '28082:28082'
       - '29092:29092'
-      - '29644:9644'
   
   console:
     container_name: redpanda-console
+    restart: always
     image: docker.redpanda.com/redpandadata/console:v2.8.4
     networks:
       - redpanda_network

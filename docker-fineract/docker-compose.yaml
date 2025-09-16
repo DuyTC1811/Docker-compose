@@ -1,0 +1,42 @@
+services:
+  mariadb:
+    image: docker.io/mariadb:11.5.2
+    container_name: fineract-mariadb
+    environment:
+      - MARIADB_ROOT_PASSWORD=mysql
+      - MARIADB_DATABASE=fineract_tenants
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  fineract:
+    image: docker.io/apache/fineract
+    container_name: fineract
+    depends_on:
+      - mariadb
+    environment:
+      - FINERACT_DEFAULT_TENANTDB_HOST=mariadb
+      - FINERACT_DEFAULT_TENANTDB_PORT=3306
+      - FINERACT_DEFAULT_TENANTDB_USER=root
+      - FINERACT_DEFAULT_TENANTDB_PASSWORD=mysql
+      - FINERACT_DEFAULT_TENANTDB_NAME=fineract_tenants
+      - FINERACT_SECURITY_BASICAUTH_ENABLED=true
+      - FINERACT_SECURITY_OAUTH_ENABLED=false
+      - FINERACT_SERVER_SSL_ENABLED=false
+      - FINERACT_SERVER_PORT=8080
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  community-app:
+    image: docker.io/openmf/community-app
+    container_name: community-app
+    ports:
+      - "9090:80"
+    environment:
+      - BASE_API_URL=http://fineract:8080/fineract-provider
+
+volumes:
+  mariadb_data:
+

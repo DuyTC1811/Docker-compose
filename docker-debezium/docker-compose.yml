@@ -1,58 +1,9 @@
-version: "3.9"
 services:
-  debezium:
-    image: debezium/connect:1.9
-    container_name: debezium
-    depends_on:
-      - redpanda
-      - postgres
-    ports:
-      - "8083:8083"
-    environment:
-      GROUP_ID: "1"
-      BOOTSTRAP_SERVERS: "redpanda:9092"
-      CONFIG_STORAGE_TOPIC: "debezium.configs"
-      OFFSET_STORAGE_TOPIC: "debezium.offset"
-      STATUS_STORAGE_TOPIC: "debezium.status"
-      KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
-      VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
-      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://redpanda:8081
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://redpanda:8081
-  postgres:
-    image: postgres:latest
-    container_name: postgres
-    restart: unless-stopped
+  debezium-server:
+    image: debezium/server:3.0.0.Final
+    container_name: debezium-server
     volumes:
-      - /Users/monkey/Documents/Docker-compose/docker-data/postgres:/var/lib/postgresql/data
+      - .conf:/debezium/config
     environment:
-      PGDATA: /data/postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: duytc
-    ports:
-      - '5432:5432'
-  redpanda:
-    image: docker.vectorized.io/vectorized/redpanda:latest
-    container_name: redpanda
-    command:
-     - redpanda start
-     - --overprovisioned
-     - --smp 1
-     - --memory 1G
-     - --reserve-memory 0M
-     - --node-id 0
-     - --check=false
-     - --kafka-addr 0.0.0.0:9092
-     - --advertise-kafka-addr redpanda:9092
-     - --pandaproxy-addr 0.0.0.0:8082
-     - --advertise-pandaproxy-addr redpanda:8082
-     - --set redpanda.enable_transactions=true
-     - --set redpanda.enable_idempotence=true
-     - --set redpanda.auto_create_topics_enabled=true
-    ports:
-      - '9092:9092'
-      - '8081:8081'
-      - '8082:8082'
-    healthcheck: { test: curl -f localhost:9644/v1/status/ready, interval: 1s, start_period: 30s }
+      - QUARKUS_LOG_LEVEL=INFO
 
-# tài liệu hướng dẫn connect sick mongodb 
-# https://nuculabs.dev/2021/09/19/kafka-connect-mongodb-sink-connector/

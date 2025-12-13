@@ -4,9 +4,9 @@ services:
     container_name: postgres
     restart: always
     environment:
-      POSTGRES_PASSWORD: anhduy12
-      POSTGRES_USER: postgres
-      POSTGRES_DB: postgres
+      postgres_password: anhduy12
+      postgres_user: postgres
+      postgres_db: postgres
     ports:
       - '5432:5432'
     volumes:

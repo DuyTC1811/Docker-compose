@@ -1,0 +1,11 @@
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    ports:
+      - "9000:9000"        # RustFS Console + S3-compatible API
+    volumes:
+      - rustfs_data:/data  # Persist data
+volumes:
+  rustfs_data:
+

@@ -1,57 +1,38 @@
 services:
-  redpanda-0:
-    # NOTE: Please use the latest version here!
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.7
-    container_name: redpanda-0
-    restart: always
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: redpanda
     command:
       - redpanda
       - start
-      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:29092
-      - --advertise-kafka-addr internal://redpanda-0:9092,external://localhost:29092
-      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:28082
-      - --advertise-pandaproxy-addr internal://redpanda-0:8082,external://localhost:28082
-      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:28081
-      - --rpc-addr redpanda-0:33145
-      - --advertise-rpc-addr redpanda-0:33145
-      - --mode dev-container
-      - --smp 1
-      - --default-log-level=info
-    volumes:
-      - redpanda-data:/var/lib/redpanda/data
-    networks:
-      - redpanda_network
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr
+      - 0.0.0.0:8082
+      - --advertise-pandaproxy-addr
+      - redpanda:8082
     ports:
-      - '29092:29092'
-  
+      - "9092:9092"
+      - "8082:8082"
+
   console:
+    image: redpandadata/console:latest
     container_name: redpanda-console
-    restart: always
-    image: docker.redpanda.com/redpandadata/console:v2.8.4
-    networks:
-      - redpanda_network
-    entrypoint: /bin/sh
-    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
     environment:
-      CONFIG_FILEPATH: /tmp/config.yml
-      CONSOLE_CONFIG_FILE: |
-        kafka:
-          brokers: ["redpanda-0:9092"]
-          schemaRegistry:
-            enabled: true
-            urls: ["http://redpanda-0:8081"]
-        redpanda:
-          adminApi:
-            enabled: true
-            urls: ["http://redpanda-0:9644"]
+      - KAFKA_BROKERS=redpanda:9092
     ports:
-      - '1234:8080'
+      - "8080:8080"
     depends_on:
-      - redpanda-0
-
-networks:
-  redpanda_network:
-    driver: bridge
-
-volumes:
-  redpanda-data: null
+      - redpanda

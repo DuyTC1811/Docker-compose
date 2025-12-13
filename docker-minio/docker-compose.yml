@@ -1,17 +1,17 @@
-version: '3.9'
 services:
   minio:
-    image: minio/minio
+    image: minio/minio:latest
     container_name: minio
-    volumes:
-      - /Users/duytc/Documents/Docker/Docker-data/minio:/data
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
     environment:
       MINIO_ROOT_USER: duytc
-      MINIO_ROOT_PASSWORD: DUYTC1122
-    command: server --console-address ":9001" /data
-    hostname: my.domain 
-    ports:
-      - '9000:9000'
-      - '9001:9001'
+      MINIO_ROOT_PASSWORD: anhduy12
+    volumes:
+      - minio_data:/data
+
 volumes:
-  minio:
+  minio_data:
+

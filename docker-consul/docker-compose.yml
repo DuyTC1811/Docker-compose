@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   consul:
     image: docker.io/library/consul:1.15.4

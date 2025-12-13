@@ -1,0 +1,21 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    environment:
+      CLICKHOUSE_USER: duytc
+      CLICKHOUSE_PASSWORD: anhduy12
+      CLICKHOUSE_DB: analytics
+    ports:
+      - '8123:8123'
+      - '9000:9000'
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+volumes:
+  clickhouse_data:
+

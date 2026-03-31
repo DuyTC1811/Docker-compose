@@ -1,5 +1,5 @@
 x-redis-common: &redis-common
-  image: redis:7.4-alpine
+  image: redis:8.6.1
   network_mode: "host"
   restart: unless-stopped
   command: >
@@ -121,7 +121,7 @@ services:
       - redis-6:/data
 
   redis-cluster-init:
-    image: redis:7.4-alpine
+    image: redis:8.6.1
     container_name: redis-cluster-init
     network_mode: "host"
     depends_on:
@@ -131,13 +131,16 @@ services:
       - redis-4
       - redis-5
       - redis-6
-    entrypoint: ["/bin/sh","-c"]
-    command: >
-      sleep 2 &&
-      redis-cli --cluster create
-      127.0.0.1:7001 127.0.0.1:7002 127.0.0.1:7003
-      127.0.0.1:7004 127.0.0.1:7005 127.0.0.1:7006
-      --cluster-replicas 1 --cluster-yes
+    restart: "no"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        sleep 8
+        redis-cli --cluster create \
+          127.0.0.1:7001 127.0.0.1:7002 127.0.0.1:7003 \
+          127.0.0.1:7004 127.0.0.1:7005 127.0.0.1:7006 \
+          --cluster-replicas 1 --cluster-yes
 
   redisinsight:
     image: redis/redisinsight:latest
@@ -146,7 +149,6 @@ services:
     restart: unless-stopped
     volumes:
       - redisinsight:/db
-    # RedisInsight sẽ mở UI ở http://localhost:5540
 
 volumes:
   redis-1:
@@ -156,4 +158,3 @@ volumes:
   redis-5:
   redis-6:
   redisinsight:
-

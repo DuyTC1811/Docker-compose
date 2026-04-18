@@ -1,9 +1,111 @@
 services:
-  debezium-server:
-    image: debezium/server:3.0.0.Final
-    container_name: debezium-server
-    volumes:
-      - .conf:/debezium/config
+  postgres:
+    image: docker.io/postgres:latest
+    container_name: postgres
+    restart: unless-stopped
     environment:
-      - QUARKUS_LOG_LEVEL=INFO
+      POSTGRES_USER: duytc
+      POSTGRES_PASSWORD: anhduy12
+      POSTGRES_DB: postgres
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/varvar/lib/postgresql
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.2
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+      - --default-log-level=info
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr
+      - internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr
+      - internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr
+      - internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr
+      - redpanda:33145
+      - --advertise-rpc-addr
+      - redpanda:33145
+    ports:
+      - "19092:19092"
+      - "18082:18082"
+      - "18081:18081"
+      - "19644:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
 
+  connect:
+    image: quay.io/debezium/connect:3.5
+    container_name: debezium-connect
+    depends_on:
+      - redpanda
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: "1"
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      ENABLE_DEBEZIUM_SCRIPTING: "false"
+      QUARKUS_LOG_LEVEL: INFO
+
+  console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    container_name: redpanda-console
+    depends_on:
+      - redpanda
+      - connect
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+
+        schemaRegistry:
+          enabled: true
+          urls: ["http://redpanda:8081"]
+
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+
+        kafkaConnect:
+          enabled: true
+          clusters:
+            - name: debezium-connect
+              url: http://connect:8083
+    ports:
+      - "8080:8080"
+
+volumes:
+  redpanda-data:
+  postgres-data:

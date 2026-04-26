@@ -109,3 +109,16 @@ services:
 volumes:
   redpanda-data:
   postgres-data:
+
+# SELECT name, setting
+# FROM pg_settings
+# WHERE name IN ('wal_level', 'max_replication_slots', 'max_wal_senders');
+
+# CREATE USER debezium_user WITH PASSWORD 'debezium_pass';
+# ALTER USER debezium_user WITH REPLICATION;
+# GRANT CONNECT ON DATABASE postgres TO debezium_user;
+# GRANT USAGE ON SCHEMA public TO debezium_user;
+# GRANT SELECT ON ALL TABLES IN SCHEMA public TO debezium_user;
+# ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO debezium_user;
+
+# CREATE PUBLICATION dbz_publication FOR ALL TABLES;

@@ -3,13 +3,16 @@ services:
     image: docker.io/mysql:latest
     container_name: mysql
     environment:
-      MYSQL_ROOT_PASSWORD: anhduy12
+      MYSQL_ROOT_PASSWORD: "anhduy12"
     ports:
       - "3306:3306"
     restart: always
     healthcheck:
       test:
-        ["CMD-SHELL", "mysqladmin ping -h localhost -p${MYSQL_ROOT_PASSWORD}"]
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

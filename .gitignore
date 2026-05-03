@@ -1,1 +1,2 @@
 docker-clickhouse/clickhouse/*
+docker-rustfs/rustfs-data/*

@@ -1,11 +1,31 @@
 services:
+  rustfs-perms:
+    image: alpine:latest
+    container_name: rustfs-perms
+    user: root
+    volumes:
+      - ./rustfs-data:/data
+    command: chown -R 10001:10001 /data
+
   rustfs:
     image: rustfs/rustfs:latest
-    container_name: rustfs
+    container_name: rustfs-server
+    depends_on:
+      rustfs-perms:
+        condition: service_completed_successfully
     ports:
-      - "9000:9000"        # RustFS Console + S3-compatible API
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - rustfs_data:/data  # Persist data
-volumes:
-  rustfs_data:
-
+      - ./rustfs-data:/data
+    environment:
+      RUSTFS_ACCESS_KEY: "rustfsadmin"
+      RUSTFS_SECRET_KEY: "rustfsadmin"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    command:
+      - rustfs
+      - --address
+      - ":9000"
+      - --console-enable
+      - /data
+    restart: unless-stopped

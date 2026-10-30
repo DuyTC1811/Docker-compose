@@ -1,39 +1,68 @@
-version: '3.9'
 services:
   postgres:
     image: postgres:latest
-    container_name: postgres
+    container_name: keycloak-postgres
     restart: unless-stopped
-    volumes:
-      - /Users/duytc/Documents/Docker/Docker-data/Mysql-data:/var/lib/mysql
+
     environment:
-      PGDATA: /data/postgres
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: duytc
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
     ports:
-      - '5432:5432'
+      - "5432:5432"
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U keycloak -d keycloak
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    networks:
+      - keycloak-network
+
   keycloak:
-    image: jboss/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.6.4
     container_name: keycloak
     restart: unless-stopped
+
+    command:
+      - start-dev
+
     environment:
-      DB_VENDOR: postgres
-      DB_ADDR: postgres
-      DB_PORT: 5432
-      DB_DATABASE: keycloak
-      DB_USER: keycloak
-      DB_PASSWORD: duytc
-      KEYCLOAK_USER: admin
-      KEYCLOAK_PASSWORD: duytc
-      KEYCLOAK_LOGLEVEL: DEBUG
-      JGROUPS_DISCOVERY_PROTOCOL: JDBC_PING
-      JGROUPS_DISCOVERY_PROPERTIES: datasource_jndi_name=java:jboss/datasources/KeycloakDS,info_writer_sleep_time=500,initialize_sql="CREATE TABLE IF NOT EXISTS JGROUPSPING ( own_addr varchar(200) NOT NULL, cluster_name varchar(200) NOT NULL, created timestamp default current_timestamp, ping_data BYTEA, constraint PK_JGROUPSPING PRIMARY KEY (own_addr, cluster_name))"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: duytc
+
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: duytc
+
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+      KC_LOG_LEVEL: INFO
+
     ports:
-      - '8080:8080'
+      - "8080:8080"
+      - "9000:9000"
+
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - keycloak-network
 
 volumes:
-  postgres_data:
-    driver: local
+  postgres-data:
+
+networks:
+  keycloak-network:
+    driver: bridge

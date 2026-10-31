@@ -1,0 +1,15 @@
+services:
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    ports: ["8081:80"]
+    environment:
+      - JWT_ENABLED=false
+      # - JWT_SECRET=change_me_this_secret_must_be_32+_chars
+      # - JWT_HEADER=Authorization
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+    volumes:
+      - oo_data:/var/www/onlyoffice/Data
+      - oo_lib:/var/lib/onlyoffice
+      - oo_db:/var/lib/postgresql
+      - ./fonts:/usr/share/fonts/truetype/custom
+volumes: { oo_data: {}, oo_lib: {}, oo_db: {} }

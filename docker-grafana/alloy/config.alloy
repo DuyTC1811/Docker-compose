@@ -1,0 +1,168 @@
+// =====================================================================
+// Grafana Alloy: collector trung tâm
+//   UI debug: http://localhost:12345
+// =====================================================================
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// ---------------------------------------------------------------------
+// 1. METRICS: scrape Spring Boot actuator
+//    Danh sách app nằm trong ./targets/*.json (tự reload, không cần restart)
+// ---------------------------------------------------------------------
+discovery.file "spring_apps" {
+  files            = ["/etc/alloy/targets/*.json"]
+  refresh_interval = "30s"
+}
+
+prometheus.scrape "spring_apps" {
+  targets         = discovery.file.spring_apps.targets
+  metrics_path    = "/actuator/prometheus"   // override theo từng target bằng label __metrics_path__
+  scrape_interval = "15s"
+  honor_labels    = true                     // giữ tag `application` do Micrometer gắn
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// Metric RED do OBI (eBPF) export, chỉ có khi chạy `--profile ebpf`
+prometheus.scrape "obi" {
+  targets         = [{"__address__" = "host.docker.internal:9400", "job" = "obi"}]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// Metric của chính Alloy
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy" {
+  targets    = prometheus.exporter.self.alloy.targets
+  forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url            = "http://mimir:9009/api/v1/push"
+    send_exemplars = true
+  }
+  external_labels = {
+    env = "dev",
+  }
+}
+
+// ---------------------------------------------------------------------
+// 2. TRACES (+ metrics/logs qua OTLP): app (Micrometer Tracing / OTel agent) và OBI
+// ---------------------------------------------------------------------
+otelcol.receiver.otlp "default" {
+  grpc { endpoint = "0.0.0.0:4317" }
+  http { endpoint = "0.0.0.0:4318" }
+
+  output {
+    traces  = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces  = [otelcol.exporter.otlp.tempo.input]
+    metrics = [otelcol.exporter.prometheus.mimir.input]
+    logs    = [otelcol.exporter.loki.default.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls { insecure = true }
+  }
+}
+
+otelcol.exporter.prometheus "mimir" {
+  forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+otelcol.exporter.loki "default" {
+  forward_to = [loki.write.default.receiver]
+}
+
+// ---------------------------------------------------------------------
+// 3. LOGS: tail file log của app
+//    Quy ước: ${APP_LOG_DIR}/<service-name>/*.log
+//    Khuyến nghị: Spring Boot structured logging (logstash JSON)
+// ---------------------------------------------------------------------
+local.file_match "app_logs" {
+  path_targets = [{"__path__" = "/var/log/app/**/*.log", "job" = "spring-boot"}]
+  sync_period  = "10s"
+}
+
+loki.source.file "app_logs" {
+  targets       = local.file_match.app_logs.targets
+  tail_from_end = true
+  forward_to    = [loki.process.app_logs.receiver]
+}
+
+loki.process "app_logs" {
+  // Lấy tên service từ thư mục con
+  stage.regex {
+    source     = "filename"
+    expression = "^/var/log/app/(?P<service_name>[^/]+)/.*$"
+  }
+
+  // Parse JSON (logstash format). Dòng không phải JSON vẫn được giữ nguyên.
+  stage.json {
+    expressions = {
+      level    = "level",
+      trace_id = "traceId",
+      span_id  = "spanId",
+      ts       = "\"@timestamp\"",
+    }
+  }
+
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339Nano"
+  }
+
+  // Label: ít giá trị (low cardinality)
+  stage.labels {
+    values = {
+      service_name = "",
+      level        = "",
+    }
+  }
+
+  // trace_id/span_id: giá trị cao → structured metadata, KHÔNG làm label
+  stage.structured_metadata {
+    values = {
+      trace_id = "",
+      span_id  = "",
+    }
+  }
+
+  // Che dữ liệu nhạy cảm trước khi vào Loki (chỉnh regex theo nghiệp vụ)
+  // Số tài khoản/thẻ 12-19 chữ số: giữ 4 số đầu và 4 số cuối
+  // (lưu ý: cũng che mọi dãy số dài khác, ví dụ ID số hoặc epoch millis trong message)
+  stage.replace {
+    expression = `\b\d{4}(\d{4,11})\d{4}\b`
+    replace    = "****"
+  }
+
+  // Email: che phần local-part
+  stage.replace {
+    expression = `\b([A-Za-z0-9._%+-]+)@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b`
+    replace    = "***"
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+  external_labels = {
+    env = "dev",
+  }
+}

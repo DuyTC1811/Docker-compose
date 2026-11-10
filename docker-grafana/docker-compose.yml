@@ -1,0 +1,133 @@
+name: observability-dev
+
+# Grafana LGTM stack cho môi trường dev/local
+#   Metrics : App (Micrometer) ──scrape──► Alloy ──remote_write──► Mimir
+#   Traces  : App (OTLP) / OBI (eBPF) ──► Alloy :4317/:4318 ──► Tempo ──(span metrics)──► Mimir
+#   Logs    : File log của app ──► Alloy ──► Loki
+#   UI      : Grafana :3000
+#
+# App Spring Boot chạy trên host (IntelliJ): API :8080, actuator :8081
+# Chạy:  docker compose up -d                 (không có eBPF)
+#        docker compose --profile ebpf up -d  (thêm OBI, chỉ Linux)
+
+services:
+  # Đổi owner volume cho các image chạy user 10001 (tempo, loki, mimir)
+  init:
+    image: busybox:1.37
+    user: root
+    entrypoint: ["sh", "-c", "chown -R 10001:10001 /var/tempo /loki /data"]
+    volumes:
+      - tempo-data:/var/tempo
+      - loki-data:/loki
+      - mimir-data:/data
+    restart: "no"
+
+  mimir:
+    image: grafana/mimir:${MIMIR_VERSION:-2.17.0}
+    container_name: mimir
+    command: ["-config.file=/etc/mimir/mimir.yaml"]
+    volumes:
+      - ./mimir/mimir.yaml:/etc/mimir/mimir.yaml:ro
+      - mimir-data:/data
+    ports:
+      - "9009:9009"
+    depends_on:
+      init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:${LOKI_VERSION:-3.5.0}
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    depends_on:
+      init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:${TEMPO_VERSION:-2.8.1}
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"     # query API (Grafana dùng nội bộ, mở ra để debug)
+    depends_on:
+      init: { condition: service_completed_successfully }
+      mimir: { condition: service_started }
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:${ALLOY_VERSION:-v1.10.0}
+    container_name: alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # scrape app/OBI trên host (Linux)
+    ports:
+      - "12345:12345"   # UI Alloy: xem pipeline/component lỗi
+      - "4317:4317"     # OTLP gRPC (app, OTel agent)
+      - "4318:4318"     # OTLP HTTP (app, OBI)
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./alloy/targets:/etc/alloy/targets:ro          # danh sách app cần scrape, sửa không cần restart
+      - ${APP_LOG_DIR:-./logs}:/var/log/app:ro          # thư mục log của app, mỗi service một thư mục con
+      - alloy-data:/var/lib/alloy/data
+    depends_on: [mimir, loki, tempo]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-12.1.0}
+    container_name: grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS:-true}   # CHỈ dùng cho local
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_USERS_DEFAULT_THEME: dark
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on: [mimir, loki, tempo]
+    restart: unless-stopped
+
+  # eBPF auto-instrumentation: không cần sửa code app. Yêu cầu Linux kernel >= 5.8 có BTF.
+  # Không chạy được với app trên host khi dùng Docker Desktop (macOS/Windows).
+  obi:
+    image: otel/ebpf-instrument:${OBI_VERSION:-v0.15.2}
+    container_name: obi
+    profiles: ["ebpf"]
+    pid: host
+    privileged: true
+    network_mode: host          # thấy process trên host, gửi OTLP tới localhost:4318 (Alloy)
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+      - /sys/fs/bpf:/sys/fs/bpf
+      - ./obi/obi-config.yml:/config/obi-config.yml:ro
+    environment:
+      OTEL_EBPF_CONFIG_PATH: /config/obi-config.yml
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://localhost:4318/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EBPF_PROMETHEUS_PORT: 9400
+      OTEL_EBPF_METRICS_FEATURES: application,application_service_graph
+      # OTEL_EBPF_TRACE_PRINTER: text   # bật để in span ra `docker logs obi` khi debug
+    depends_on: [alloy]
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
+  mimir-data:
+  loki-data:
+  tempo-data:
+  alloy-data:

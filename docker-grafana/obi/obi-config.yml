@@ -1,0 +1,31 @@
+# OpenTelemetry eBPF Instrumentation (OBI)
+# Tự bắt HTTP/gRPC/SQL ở tầng kernel, không cần sửa code.
+
+discovery:
+  instrument:
+    # Instrument process đang listen trên các port này (API của app, KHÔNG phải actuator)
+    - open_ports: 8080
+    # Hoặc chọn theo tên executable:
+    # - exe_path: "*java*"
+  # Không trace chính các container của stack observability
+  exclude_instrument:
+    - exe_path: "*alloy*"
+    - exe_path: "*grafana*"
+    - exe_path: "*mimir*"
+    - exe_path: "*loki*"
+    - exe_path: "*tempo*"
+
+# Gộp URL có path variable để tránh bùng nổ cardinality
+#   /api/v1/disbursements/123 -> /api/v1/disbursements/{id}
+routes:
+  unmatched: heuristic
+  # patterns:
+  #   - /api/v1/disbursements/{id}
+
+attributes:
+  kubernetes:
+    enable: false
+
+prometheus_export:
+  port: 9400
+  path: /metrics

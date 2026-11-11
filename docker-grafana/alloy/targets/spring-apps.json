@@ -1,9 +1,11 @@
 [
   {
-    "targets": ["host.docker.internal:8081"],
+    "targets": [
+      "observability-app:8081"
+    ],
     "labels": {
       "job": "spring-boot",
-      "application": "my-service"
+      "application": "observability"
     }
   }
 ]

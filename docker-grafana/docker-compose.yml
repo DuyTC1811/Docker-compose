@@ -49,8 +49,8 @@ services:
     image: grafana/mimir:2.17.0
     command: ["-config.file=/etc/mimir.yaml"]
     volumes:
-      - ./mimir.yaml:/etc/mimir.yaml:ro
-      - mimir-data:/tmp/mimir                   # khớp với đường dẫn trong mimir.yaml
+      - ./mimir/mimir.yaml:/etc/mimir.yaml:ro
+      - mimir-data:/data
     ports: ["9009:9009"]
 
   loki:
@@ -66,8 +66,8 @@ services:
     image: grafana/tempo:2.8.1
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
-      - ./tempo.yaml:/etc/tempo.yaml:ro
-      - tempo-data:/var/tempo                   # khớp storage.trace.*.path trong tempo.yaml
+      - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
     ports: ["3200:3200"]
     depends_on:
       init: { condition: service_completed_successfully }

@@ -1,4 +1,57 @@
-// ---------- LOGS: stdout của container có label logging=alloy ----------
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// ==================== METRICS ====================
+// App Spring Boot: gọi qua tên service trong compose network
+prometheus.scrape "spring_apps" {
+  targets = [
+    {"__address__" = "observability:8081", "job" = "spring-boot", "application" = "observability"},
+  ]
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "15s"
+  honor_labels    = true
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+// OBI chạy network host, nên đi qua host-gateway
+prometheus.scrape "obi" {
+  targets         = [{"__address__" = "host.docker.internal:9400", "job" = "obi"}]
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "http://mimir:9009/api/v1/push"
+  }
+  external_labels = { env = "dev" }
+}
+
+// ==================== TRACES ====================
+otelcol.receiver.otlp "default" {
+  grpc { endpoint = "0.0.0.0:4317" }
+  http { endpoint = "0.0.0.0:4318" }
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls { insecure = true }
+  }
+}
+
+// ==================== LOGS (stdout container) ====================
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
   filter {
@@ -30,11 +83,13 @@ loki.process "ecs" {
   stage.json {
     expressions = {
       level    = "\"log.level\"",
-      trace_id = "\"trace.id\" || traceId || trace_id",   // ECS / MDC / OBI
+      trace_id = "\"trace.id\" || traceId || trace_id",
       span_id  = "\"span.id\" || spanId || span_id",
     }
   }
-  stage.labels { values = { level = "" } }
+  stage.labels {
+    values = { level = "" }
+  }
   stage.structured_metadata {
     values = { trace_id = "", span_id = "" }
   }
@@ -43,4 +98,12 @@ loki.process "ecs" {
     replace    = "****"
   }
   forward_to = [loki.write.default.receiver]
+}
+
+// Block bị thiếu gây ra lỗi
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+  external_labels = { env = "dev" }
 }

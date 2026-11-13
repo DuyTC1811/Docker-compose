@@ -1,4 +1,5 @@
-# Tempo single-binary, lưu local. CHỈ cho dev.
+# Tempo 3.x monolithic (target: all), lưu local. CHỈ cho dev.
+# Không cần Kafka ở chế độ monolithic.
 stream_over_http_enabled: true
 
 server:
@@ -14,12 +15,10 @@ distributor:
         http:
           endpoint: 0.0.0.0:4318
 
-ingester:
-  max_block_duration: 5m
-
-compactor:
-  compaction:
-    block_retention: 72h              # giữ trace 3 ngày
+# Thay cho ingester (đã bị xoá ở 3.0): live-store giữ trace gần đây + flush block
+live_store:
+  wal:
+    path: /var/tempo/live-store/traces
 
 # Sinh metric từ trace (RED metrics + service graph) rồi đẩy sang Mimir
 metrics_generator:
@@ -31,8 +30,6 @@ metrics_generator:
     remote_write:
       - url: http://mimir:9009/api/v1/push
         send_exemplars: true
-  traces_storage:
-    path: /var/tempo/generator/traces
 
 storage:
   trace:
@@ -44,8 +41,12 @@ storage:
 
 overrides:
   defaults:
+    # Thay cho compactor.compaction.block_retention
+    compaction:
+      block_retention: 72h            # giữ trace 3 ngày
     metrics_generator:
-      processors: [service-graphs, span-metrics, local-blocks]
+      # Bỏ local-blocks: 3.0 do live-store đảm nhiệm
+      processors: [service-graphs, span-metrics]
 
 usage_report:
   reporting_enabled: false

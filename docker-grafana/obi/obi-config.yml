@@ -3,29 +3,35 @@
 
 discovery:
   instrument:
-    # Instrument process đang listen trên các port này (API của app, KHÔNG phải actuator)
+    # Phải khớp CẢ HAI: java + listen 8080
+    # Lưu ý: instrument cả process => 8081 (actuator) cũng bị bắt, lọc ở routes
     - open_ports: 8080
-    # Hoặc chọn theo tên executable:
-    # - exe_path: "*java*"
-  # Không trace chính các container của stack observability
-  exclude_instrument:
-    - exe_path: "*alloy*"
-    - exe_path: "*grafana*"
-    - exe_path: "*mimir*"
-    - exe_path: "*loki*"
-    - exe_path: "*tempo*"
+      exe_path: "*java*"
+      name: observability
+  # Spring app đã gửi OTLP qua Micrometer? false = OBI vẫn instrument
+  exclude_otel_instrumented_services: false
 
-# Gộp URL có path variable để tránh bùng nổ cardinality
-#   /api/v1/disbursements/123 -> /api/v1/disbursements/{id}
 routes:
-  unmatched: heuristic
-  # patterns:
-  #   - /api/v1/disbursements/{id}
+  unmatched: heuristic # fallback cho route chưa khai báo
+  patterns:
+    - /internal/*
+  # Bỏ span/metrics của scrape actuator & health check
+  ignored_patterns:
+    - /actuator/*
 
 attributes:
   kubernetes:
     enable: false
 
+metrics:
+  features:
+    - application
+    - application_service_graph
+
 prometheus_export:
   port: 9400
   path: /metrics
+
+# OBI chạy network host -> Alloy publish 4317 ra host
+otel_traces_export:
+  endpoint: http://localhost:4317

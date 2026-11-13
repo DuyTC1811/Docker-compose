@@ -16,6 +16,7 @@ prometheus.scrape "spring_apps" {
 }
 
 // OBI chạy network host, nên đi qua host-gateway
+// (compose của alloy cần: extra_hosts: ["host.docker.internal:host-gateway"])
 prometheus.scrape "obi" {
   targets         = [{"__address__" = "host.docker.internal:9400", "job" = "obi"}]
   scrape_interval = "15s"
@@ -29,18 +30,20 @@ prometheus.remote_write "mimir" {
   external_labels = { env = "dev" }
 }
 
-// ==================== TRACES ====================
+// ==================== TRACES + OTLP METRICS ====================
 otelcol.receiver.otlp "default" {
   grpc { endpoint = "0.0.0.0:4317" }
   http { endpoint = "0.0.0.0:4318" }
   output {
-    traces = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
   }
 }
 
 otelcol.processor.batch "default" {
   output {
-    traces = [otelcol.exporter.otlp.tempo.input]
+    traces  = [otelcol.exporter.otlp.tempo.input]
+    metrics = [otelcol.exporter.prometheus.mimir.input]
   }
 }
 
@@ -49,6 +52,11 @@ otelcol.exporter.otlp "tempo" {
     endpoint = "tempo:4317"
     tls { insecure = true }
   }
+}
+
+// OTLP metrics -> Prometheus format -> Mimir (dùng chung remote_write ở trên)
+otelcol.exporter.prometheus "mimir" {
+  forward_to = [prometheus.remote_write.mimir.receiver]
 }
 
 // ==================== LOGS (stdout container) ====================
@@ -62,8 +70,11 @@ discovery.docker "containers" {
 
 discovery.relabel "containers" {
   targets = discovery.docker.containers.targets
+  // service_name = label "app", nếu không có thì fallback sang tên service compose
   rule {
-    source_labels = ["__meta_docker_container_label_app"]
+    source_labels = ["__meta_docker_container_label_app", "__meta_docker_container_label_com_docker_compose_service"]
+    separator     = ";"
+    regex         = "^;?([^;]+);?.*$"
     target_label  = "service_name"
   }
   rule {
@@ -80,27 +91,29 @@ loki.source.docker "containers" {
 }
 
 loki.process "ecs" {
+  // Hỗ trợ cả ECS phẳng ("log.level") lẫn ECS lồng ({"log":{"level":...}})
   stage.json {
     expressions = {
-      level    = "\"log.level\"",
-      trace_id = "\"trace.id\" || traceId || trace_id",
-      span_id  = "\"span.id\" || spanId || span_id",
+      level    = "\"log.level\" || log.level",
+      trace_id = "\"trace.id\" || trace.id || traceId || trace_id",
+      span_id  = "\"span.id\" || span.id || spanId || span_id",
     }
   }
   stage.labels {
     values = { level = "" }
   }
+  // Cần Loki schema v13 + tsdb, allow_structured_metadata = true
   stage.structured_metadata {
     values = { trace_id = "", span_id = "" }
   }
+  // Che 8 số giữa của PAN 16 số: 4111111111111111 -> 4111********1111
   stage.replace {
-    expression = `\b\d{4}(\d{4,11})\d{4}\b`
-    replace    = "****"
+    expression = `\b\d{4}(\d{8})\d{4}\b`
+    replace    = "********"
   }
   forward_to = [loki.write.default.receiver]
 }
 
-// Block bị thiếu gây ra lỗi
 loki.write "default" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"

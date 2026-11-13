@@ -1,4 +1,5 @@
-# Mimir monolithic mode, lưu filesystem. CHỈ cho dev; production dùng object storage (S3/MinIO).
+# Mimir monolithic mode (classic architecture, KHÔNG dùng Kafka/ingest storage), lưu filesystem.
+# CHỈ cho dev; production dùng object storage (S3/MinIO).
 multitenancy_enabled: false
 
 server:
@@ -6,24 +7,30 @@ server:
   grpc_listen_port: 9095
   log_level: warn
 
+# Một chỗ khai báo storage, mỗi loại dữ liệu tách bằng prefix
 common:
   storage:
     backend: filesystem
     filesystem:
-      dir: /data/common
+      dir: /data/storage
 
 blocks_storage:
-  backend: filesystem
+  storage_prefix: blocks
   bucket_store:
     sync_dir: /data/tsdb-sync
-  filesystem:
-    dir: /data/blocks
   tsdb:
     dir: /data/tsdb
+
+ruler_storage:
+  storage_prefix: rules
+
+alertmanager_storage:
+  storage_prefix: alertmanager
 
 compactor:
   data_dir: /data/compactor
   sharding_ring:
+    instance_addr: 127.0.0.1
     kvstore:
       store: memberlist
 
@@ -42,17 +49,15 @@ ingester:
 
 store_gateway:
   sharding_ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: memberlist
     replication_factor: 1
-
-ruler_storage:
-  backend: filesystem
-  filesystem:
-    dir: /data/rules
 
 limits:
   # Giới hạn để phát hiện sớm lỗi cardinality (tag userId, txnId...)
   max_global_series_per_user: 500000
   max_label_names_per_series: 40
-  # Nhận exemplar (trace_id) từ Micrometer để nhảy metric -> trace
+  # Nhận exemplar (trace_id) từ Micrometer/Tempo để nhảy metric -> trace
   max_global_exemplars_per_user: 100000
   compactor_blocks_retention_period: 15d

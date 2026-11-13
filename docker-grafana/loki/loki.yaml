@@ -1,4 +1,5 @@
-# Loki single-binary, lưu filesystem. CHỈ cho dev.
+# Loki 3.x single-binary, lưu filesystem. CHỈ cho dev.
+# Pin image (vd grafana/loki:3.7.x) — Loki 4.0 đổi sang Thanos storage client mặc định.
 auth_enabled: false
 
 server:
@@ -34,6 +35,8 @@ limits_config:
   volume_enabled: true
   ingestion_rate_mb: 16
   ingestion_burst_size_mb: 32
+  # Alloy đã gắn label `level` -> tắt detected_level để không có 2 trường level
+  discover_log_levels: false
 
 compactor:
   working_directory: /loki/compactor

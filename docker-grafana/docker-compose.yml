@@ -34,7 +34,7 @@ services:
     restart: "no"
 
   grafana:
-    image: grafana/grafana:12.1.0
+    image: grafana/grafana:13.3.1
     ports: ["3000:3000"]
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"         # chỉ cho local
@@ -46,7 +46,7 @@ services:
     depends_on: [mimir, loki, tempo]
 
   mimir:
-    image: grafana/mimir:2.17.0
+    image: grafana/mimir:3.2.3                  # classic architecture, không bật ingest storage/Kafka
     command: ["-config.file=/etc/mimir.yaml"]
     volumes:
       - ./mimir/mimir.yaml:/etc/mimir.yaml:ro
@@ -54,16 +54,17 @@ services:
     ports: ["9009:9009"]
 
   loki:
-    image: grafana/loki:3.5.0
-    command: ["-config.file=/etc/loki/local-config.yaml"]
+    image: grafana/loki:3.7.9                   # chưa lên 4.0 (đang RC, đổi storage client)
+    command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
-      - loki-data:/loki                         # local-config.yaml mặc định lưu ở /loki
+      - ./loki/loki.yaml:/etc/loki/loki.yaml:ro # dùng config của mình, không phải local-config mặc định
+      - loki-data:/loki
     ports: ["3100:3100"]
     depends_on:
       init: { condition: service_completed_successfully }
 
   tempo:
-    image: grafana/tempo:2.8.1
+    image: grafana/tempo:3.1.1                  # 3.x: dùng tempo.yaml bản 3.x (live_store, không ingester/compactor)
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
@@ -74,7 +75,7 @@ services:
 
   # ---------- Collector ----------
   alloy:
-    image: grafana/alloy:v1.10.0
+    image: grafana/alloy:v1.21.3
     command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
     extra_hosts: ["host.docker.internal:host-gateway"]   # scrape OBI :9400 trên host
     ports:
@@ -82,13 +83,14 @@ services:
       - "4318:4318"                                      # OTLP từ OBI
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./alloy/targets:/etc/alloy/targets:ro            # cho discovery.file (spring-apps.json)
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy-data:/var/lib/alloy/data
     depends_on: [mimir, loki, tempo]
 
   # ---------- eBPF instrumentation ----------
   obi:
-    image: otel/ebpf-instrument:v0.15.2
+    image: otel/ebpf-instrument:v0.15.2         # đã là bản stable mới nhất (v1.0.0 đang RC)
     pid: host
     privileged: true
     network_mode: host
@@ -101,7 +103,7 @@ services:
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://localhost:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_EBPF_PROMETHEUS_PORT: 9400
-      OTEL_EBPF_METRICS_FEATURES: application,application_service_graph
+      OTEL_EBPF_METRICS_FEATURES: application
       # OTEL_EBPF_TRACE_PRINTER: text           # bật khi debug
     depends_on: [alloy]                         # OBI tự phát hiện process, không cần chờ app
 

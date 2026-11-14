@@ -45,7 +45,7 @@ overrides:
     compaction:
       block_retention: 72h            # giữ trace 3 ngày
     metrics_generator:
-      # Bỏ local-blocks: 3.0 do live-store đảm nhiệm
+      # Bỏ local-blocks: 3.x do live-store đảm nhiệm
       processors: [service-graphs, span-metrics]
 
 usage_report:

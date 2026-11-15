@@ -3,8 +3,8 @@ name: observability
 services:
   # ---------- App ----------
   observability:
-    build: ..
-    image: observability:dev
+    image: observability:dev                    # build riêng ở project app, compose chỉ chạy image
+    pull_policy: never                          # image local, không pull từ registry
     ports:
       - "8080:8080"                             # chỉ public API
       - "127.0.0.1:8081:8081"                   # actuator: chỉ localhost (để curl debug)
@@ -13,10 +13,12 @@ services:
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       APP_ENV: dev
+      OTLP_ENDPOINT: http://host.docker.internal:4318   # Micrometer -> Alloy (qua host)
       OTEL_SERVICE_NAME: observability          # OBI dùng làm service.name
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
       LOGGING_FILE_NAME: ""
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+    extra_hosts: ["host.docker.internal:host-gateway"] # bắt buộc trên Linux
     labels:
       logging: alloy                            # Alloy thu stdout
       app: observability                        # -> service_name trong Loki
@@ -100,10 +102,7 @@ services:
       - ./obi/obi-config.yml:/config/obi-config.yml:ro
     environment:
       OTEL_EBPF_CONFIG_PATH: /config/obi-config.yml
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://localhost:4318/v1/traces
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_EBPF_PROMETHEUS_PORT: 9400
-      OTEL_EBPF_METRICS_FEATURES: application
       # OTEL_EBPF_TRACE_PRINTER: text           # bật khi debug
     depends_on: [alloy]                         # OBI tự phát hiện process, không cần chờ app
 

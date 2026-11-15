@@ -8,11 +8,10 @@ discovery:
     - open_ports: 8080
       exe_path: "*java*"
       name: observability
-  # Spring app đã gửi OTLP qua Micrometer? false = OBI vẫn instrument
   exclude_otel_instrumented_services: false
 
 routes:
-  unmatched: heuristic # fallback cho route chưa khai báo
+  unmatched: heuristic
   patterns:
     - /internal/*
   # Bỏ span/metrics của scrape actuator & health check
@@ -31,7 +30,3 @@ metrics:
 prometheus_export:
   port: 9400
   path: /metrics
-
-# OBI chạy network host -> Alloy publish 4317 ra host
-otel_traces_export:
-  endpoint: http://localhost:4317
